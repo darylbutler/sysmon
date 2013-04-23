@@ -1,0 +1,8 @@
+<!-- System Monitor Layout Test / Idea -->
+<horizontal_layout height="30" width="auto">
+    <vertical_layout width="200" margin="2">
+        <guage orientation="vertical" value="cpu1" gradient="true" option="false" height="20" />
+        <graph type='line' value="cpu1" height="auto" />
+        <text value="""<span foreground="blue" size="x-large">Blue text</span> is <i>cool</i\>!"""></text>
+    </vertical_layout>
+</horizontal_layout>

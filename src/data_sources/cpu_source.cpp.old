@@ -1,0 +1,313 @@
+    /*
+     * CpuSource is a Data Source that collects data about the cpu load
+     * from /proc/stat.
+     *
+     * It's a pretty simple class.  It holds data for CpuCount + 1, with 0
+     * being the aggregate cpu load (All cores combined) and then 1 = cpu1,
+     * etc...
+     *
+     * Notice that it first calculates the difference in jiffies from out last
+     * update.  This allows us to monitor the changes to the jiffies, not the
+     * total jiffies.
+     *
+     */
+
+#include <string>
+#include <sstream>
+#include <fstream>
+#include <vector>
+#include <memory>
+#include <stdlib.h>
+
+#include "cpu_source.h"
+#include "../utilities/gtop.cpp"
+#include "../utilities/file_utility.cpp"
+#include "data_source.cpp"
+
+const int JIFFY_COUNT = 10;
+
+// Method: DoWork()
+// (Inherited from DataStore)
+// DataCollection -> CpuSource
+//
+// Called when we should update our internal values
+void CpuSource::DoWork()
+{
+    // Swap the jiffy vectors
+    swap_jiffy_counts();
+
+    // Load /proc/stat
+    auto proc = unique_ptr<vector<string>>(new vector<string>());
+    get_proc(proc.get());
+
+    // Iterate through it and load the totals for each cpu into the apporiate
+    // vector.
+    for (vector<string>::iterator cpu = proc->begin(); cpu != proc->end(); cpu++)
+    {
+        double total, work = 0;
+        int cpu_index = 0;
+
+        // Parse the string into an array of jiffy ints
+        auto jiffies = unique_ptr<vector<int>>(new vector<int>(11));
+        parse_string_into_array(*cpu, jiffies.get());
+
+        // grab the cpu #
+        cpu_index = jiffies->front();
+
+        // calculate the total
+        total = sum_array(jiffies.get(), 1, JIFFY_COUNT);
+
+        // calculate work
+        work = sum_array(jiffies.get(), 1, 3);
+
+        // Store these in the vectors
+        cpu_jiffies_total->insert(cpu_jiffies_total->begin() + cpu_index, total);
+        cpu_jiffies_work->insert(cpu_jiffies_work->begin() + cpu_index, work);
+    }
+
+    // Average these numbers and store them in *cpu_load vector
+    update_cpu_load();
+}
+
+// Methods: calculate_cpu_load()
+// uses the cpu_jiffies vectors total and work, averages the difference of
+// these two time period (ie, work and last_work)
+void CpuSource::update_cpu_load()
+{
+    // Special Case:  If either of the cpu_jiffies_last_* are empty, then
+    // this is the first time we've tried to calc the load, but we need two
+    // jiffie counts (ie, work and last_work), so return because there's
+    // nothing we can do
+    if (cpu_jiffies_last_total->size() <= 0) return;
+
+    // For every cpu, create a manual entry in *cpu_load (use a temp vector
+    // and swap with *cpu_load at the end)
+    auto load = unique_ptr<vector<double>>(new vector<double>(cpu_jiffies_total->size()));
+    load->clear();
+
+    // Assert that all *cpu_jiffies_* are the same size()!
+    for (int cpu = 0; cpu < (int) cpu_jiffies_total->size(); cpu++)
+    {
+        // Calculate the amount of jiffies that were counted since we last checked
+        double total_done = cpu_jiffies_total->at(cpu) - cpu_jiffies_last_total->at(cpu);
+        double work_done = cpu_jiffies_work->at(cpu) - cpu_jiffies_last_work->at(cpu);
+
+
+        // Calc the ratio (Should always be < 1)
+        double cpu_load = work_done / total_done;
+
+        // Store them in the temporary vector array
+        load->insert(load->begin() + cpu, cpu_load);
+    }
+
+    // We have now calculated the current load on each cpu, and it is stored in
+    // the local vector *load.  We need to swap the class member *cpu_load
+    // with *load.  If this class ever goes threaded, you need to lock
+    // *cpu_load with a mutex now and release after swap returns
+    cpu_load->swap(*load);
+}
+
+// Method: swap_jiffy_counts()
+// This method is called when we need to update our value.  The
+// cpu_jiffies_last_* members are old, so we free their memory.  Now, the
+// cpu_jiffies_total is not old (because we will be reading it again soon)
+// so swap the addresses of the pointers.  Then, reintilaize the vectors.
+void CpuSource::swap_jiffy_counts()
+{
+    // First, drop the old values, and move the new (Now old) values to the old
+    // values pointer.
+    cpu_jiffies_last_total->swap(*cpu_jiffies_total);
+    cpu_jiffies_last_work->swap(*cpu_jiffies_work);
+    cpu_jiffies_total->clear();
+    cpu_jiffies_work->clear();
+}
+
+// Method: sum_array(start_index, end_index)
+// start_index - inclusive - the first element to start the sum at
+// end_index - inclusive - the last element to sum
+double CpuSource::sum_array(vector<int>* array, int start_index, int end_index)
+{
+    double sum = 0;
+
+    if (array)
+    {
+        auto beginIter  = array->begin() + start_index;
+        auto endIter    = array->begin() + end_index;
+        for (auto iter = beginIter; iter != endIter; iter++)
+            sum += *iter;
+    }
+
+    return sum;
+}
+// Method: get_proc()
+// This is a private function the class uses to load the /proc/stat file into
+// an array of strings, skipping any irrelevant lines (This is cpu_source, so
+// if it isn't about cpu stats, we don't care).
+// -- It should go without saying but...  be sure to delete the returned vector
+// after use.
+//
+// UPDATE: I moved the proc file path to the member variable file_path
+// This makes it easier to test the class
+//
+// UPDATE 2: Moved this to FileUtility class
+//
+// UPDATE 3: Fill a sent array
+void CpuSource::get_proc(vector<string>* array)
+{
+    //string line;
+    //ifstream proc_file (file_path);
+    //if (proc_file.is_open())
+    //{
+        //while (proc_file.good())
+        //{
+            //// Read in the current line
+            //getline(proc_file, line);
+            //// If it is not relevant, we are done here (Everything we need is
+            ////      at the beginning of the file
+            //if (line.compare(0, 3, "cpu") != 0)  // line should start with "cpu"
+            //{
+                //proc_file.close();
+                ////return lines;
+                //break;
+            //}
+            //else
+                //lines->push_back(line);
+        //}
+    //}
+    //else
+    //{
+        //// TODO log that there was an error opening the /proc/stat file
+    //}
+
+    // This is soooo easy...
+    FileUtility file;
+    auto lines = file.GetFile(file_path, "cpu");
+    array->clear();
+
+    // TEMP Read lines into array
+    // TODO in the long term, file.GetFile should take an array and fill it
+    for (auto iter = lines->begin(); iter != lines->end(); iter++)
+        array->push_back(*iter);
+
+    return; // nothing
+}
+
+// Method: parse_string_into_array
+// Takes a single string from the proc file
+// it is assumed to be formatted like:
+// cpu[c] x x x x x x x x x x
+// where c is the core # and x is the jiffie count
+//
+// This function takes these, turns them into ints,
+// and returns them in an array, with 0 being the cpu number, and
+// 1 - 10 being the corresponding jiffies
+vector<int>* CpuSource::parse_string_into_array(string str, vector<int>* fill_array)
+{
+    fill_array->clear();
+
+    // Split the string by spaces
+    FileUtility file;
+    vector<string> array = file.SplitString(str, ' ');
+    auto iter = array.begin();
+
+    // Assert, array.size() should == 11
+    if (11 != (int) array.size())
+        cerr << "In CpuSource::parse_string_into_array(), array.size() != 11" << endl;
+
+    // First, read in the cpu #
+    int cpuNum;
+    if (*iter == "cpu")  // No trailing number
+        cpuNum = 0;
+    else
+        cpuNum = stoi(iter->substr(3, 1)) + 1;
+    fill_array->push_back(cpuNum);
+
+    // Read the returned array into the fill array, converting to int as we go
+    iter++; // We're done with the first element so move past it
+    for (; iter != array.end(); iter++)
+        fill_array->push_back(stoi(*iter));
+
+    return fill_array;
+}
+
+// ----------------------------------------------------------------------------
+// DataWidget -> DataSource
+//
+// GetValue(value)
+// returns requested cpu load or error string if value is not valid
+// accepts value =
+//      "all"   - Returns formatted string of aggregate load, or cpu_load if
+//                  system has a single cpu
+//      "cpuX"  - Returns an individual cpu.  Cpu0 will always return the
+//                  aggregate cpu load
+string CpuSource::GetValue(string value)
+{
+    double result = GetValueAsNumber(value);
+
+    if (result == -1) return "error";
+
+    result = result * 100.0;
+
+    stringstream formatted;
+    formatted.precision(2);
+    formatted << fixed << result << "%";
+
+    return formatted.str();
+}
+
+
+double CpuSource::GetValueAsNumber(string value)
+{
+    if (value == "all" || value == "")
+        return cpu_load->at(0);
+
+    if (value.compare(0, 3, "cpu") == 0)
+    {
+        int core = atoi(&value[3]) + 1;
+
+        if (core >= (int) cpu_load->size())
+            return -1;  // cpu index out_of_bounds
+        else
+            return cpu_load->at(core);
+    }
+
+    // Unknown value
+    return -1;
+}
+
+// ----------------------------------------------------------------------------
+// Constructor
+CpuSource::CpuSource()
+{
+    cpu_jiffies_last_total  = unique_ptr<vector<double>>(new vector<double>());
+    cpu_jiffies_last_work   = unique_ptr<vector<double>>(new vector<double>());
+    cpu_jiffies_total       = unique_ptr<vector<double>>(new vector<double>());
+    cpu_jiffies_work        = unique_ptr<vector<double>>(new vector<double>());
+    cpu_load                = unique_ptr<vector<double>>(new vector<double>());
+
+    file_path = "/proc/stat";
+}
+CpuSource::CpuSource(string file)
+{
+    cpu_jiffies_last_total  = unique_ptr<vector<double>>(new vector<double>());
+    cpu_jiffies_last_work   = unique_ptr<vector<double>>(new vector<double>());
+    cpu_jiffies_total       = unique_ptr<vector<double>>(new vector<double>());
+    cpu_jiffies_work        = unique_ptr<vector<double>>(new vector<double>());
+    cpu_load                = unique_ptr<vector<double>>(new vector<double>());
+
+    file_path = file;
+}
+CpuSource::~CpuSource()
+{
+    //delete cpu_jiffies_last_total;
+    //delete cpu_jiffies_last_work;
+    //delete cpu_jiffies_total;
+    //delete cpu_jiffies_work;
+    //delete cpu_load;
+
+    //cpu_jiffies_last_total  = 0;
+    //cpu_jiffies_last_work   = 0;
+    //cpu_jiffies_total       = 0;
+    //cpu_jiffies_work        = 0;
+    //cpu_load                = 0;
+}

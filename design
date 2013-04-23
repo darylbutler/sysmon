@@ -1,0 +1,52 @@
+Goal:
+    Simple system monitor that is quick and easy to extend.  Layout using XML and generic representation widgets (text, bar, graph).
+
+UI--
+    Use simple xml like 'test.xml' in this directory.
+    Define two types of widgets:
+        -layout
+            -handles positioning widgets
+            -only widget types that can have children
+        -visualization
+            -represent visual ways to represent data
+            -all kinds of options
+                -colors in hex
+
+    Basically, when the screen is requested to be redrawn, the root widget (this must be a layout type widget for obvious reason)
+    will call its draw method on each of its children, providing them with their exact dimensions.
+        Therefore, every widget, should have a draw function that recives a point (x, y) and geometry(width, height).
+    However, I do not think our layouts should be afriad of empty space, so a child's size should be considered as strict unless
+    it is outside the bounds of its parent (In other words, a widget can be as small as it wants, but it can only be as large as
+    its parent is).
+
+Widgets--
+    -- Bar Graph
+    -- Line Graph
+    -- Arc Graph (Guage)
+    -- Text
+    -- Image
+
+DataSources--
+    This is a list of data we want to make available to user and what files
+    to read or what functions to call.
+
+    -- CPU %                                    /proc/stat
+    -- Load Avgerage                            /proc/loadavg
+    --
+    -- Battery Charge %                         ?
+    -- Battery Time Remaining                   ?
+    -- Memory (Buffered)                        /proc/mem
+    -- Memory (Cached)                          /proc/mem
+    -- Desktop {Number,Name,Total}              ?
+    -- Disk IO{_read,_write}                    ?
+    -- Net {Download,Upload} {Speed,Amount}     ?
+    -- Shell Execution Output                   Output stream of pid
+    -- Time (Current System Time)               C++ Function
+    -- Uptime                                   sysinfo() or /proc/uptime
+    -- CPU Frequency                            ?
+    -- File System {Total,Used(%),Free(%),Type} ?
+    -- ReadFile (Read a file from disk)         Easy
+    -- Disk IO Scheduler                        ?
+    -- Kernel version                           /proc/version
+    -- Machine Architecture (x86)
+

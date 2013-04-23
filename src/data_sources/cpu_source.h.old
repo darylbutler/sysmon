@@ -1,0 +1,50 @@
+#ifndef CPU_SOURCE_H
+#define CPU_SOURCE_H
+
+#include "data_source.h"
+
+using namespace std;
+
+class CpuSource : public DataSource
+{
+protected:
+    // Members
+    string file_path;
+    unique_ptr<vector<double>>
+                    cpu_jiffies_last_total, // -These store the jiffie counts
+                    cpu_jiffies_total,      //   we read.  _last is stored from the
+                    cpu_jiffies_last_work,  //   last iteration, so earlier in time.
+                    cpu_jiffies_work,       //   one double per cpu
+                    cpu_load;               // -Holds the current calculated
+                                            //   cpu load for each cpu
+
+    // Methods
+    void swap_jiffy_counts();   // Moves the total and work to last_total etc...
+    double sum_array(vector<int>* array, int start_index, int end_index);
+    void get_proc(vector<string>* array); // Fills array of strings of relevant lines in /proc/stat
+    void update_cpu_load();     // uses the cpi_jiffies_total / work vectors to
+                                // calculate cpu load
+    vector<int>* parse_string_into_array(string, vector<int>*); // Parses a string into an
+        // array of ints and returns a pointer to that array
+
+public:
+    // Constructor
+    CpuSource();
+    CpuSource(string file);
+    ~CpuSource();
+
+    // DataCollection -> DataSource
+    virtual void DoWork();
+
+    // DataWidget -> CpuSource
+    virtual string GetValue(string value);
+    //virtual string* GetValues();
+    virtual double GetValueAsNumber(string value);
+    //virtual double* GetValuesAsNumbers();
+
+    // Accessors
+    inline string getFilePath() { return file_path; }
+    inline void   setFilePath(string path) { file_path = path; }
+};
+
+#endif
