@@ -1,0 +1,113 @@
+# -- Conky settings -- #
+background no
+update_interval 2
+
+cpu_avg_samples 2
+net_avg_samples 2
+
+override_utf8_locale yes
+
+double_buffer yes
+no_buffers yes
+
+text_buffer_size 2048
+imlib_cache_size 0
+
+# -- Window specifications -- #
+
+own_window yes
+own_window_type desktop
+own_window_colour 222222
+own_window_transparent no
+own_window_hints undecorated,sticky,skip_taskbar,skip_pager,below
+
+border_inner_margin 4
+border_outer_margin 0
+
+minimum_size 200 1200
+maximum_width 200
+
+alignment top_left
+gap_x 4
+gap_y 19
+
+# -- Graphics settings -- #
+draw_shades no
+draw_outline no
+draw_borders no
+draw_graph_borders yes
+
+# -- Text settings -- #
+use_xft yes
+xftfont Inconsolata:size=10
+xftalpha 0.4
+
+uppercase no
+
+lua_load /home/daryl/.config/conky/helpers.lua
+lua_draw_hook_pre conky_draw_graph
+
+default_color cccccc
+color1 566D83
+color2 ce2c51
+color3 519f50
+
+TEXT
+${color1}${font Inconsolata:bold:size=11}${alignc}daryl${color}@${nodename}${font}
+${font Inconsolata:bold:size=10}kernel:${font} ${kernel}
+
+${font Inconsolata:bold:size=11}CPU ${font}${hr}
+cpu0 -- ${lua_parse conky_cpu1_colorize}% @ ${freq_g 1}GHz
+
+
+
+cpu1 -- ${lua_parse conky_cpu2_colorize}% @ ${freq_g 2}GHz
+
+
+
+cpu2 -- ${lua_parse conky_cpu3_colorize}% @ ${freq_g 3}GHz
+
+
+
+${font Inconsolata:bold:size=10}CPU Load Avg:  ${alignr}${font}${loadavg}
+
+${font Inconsolata:bold:size=11}GPU ${font}${hr}
+${font Inconsolata:bold:size=10}GPU  Temp:  ${alignr}${font}${execi 4 nvidia-settings -q gpucoretemp -t} C
+${font Inconsolata:bold:size=10}Fan Speed:  ${alignr}${font}${execi 4 nvidia-smi -q | grep 'Fan Speed' | awk -F":" '{print $2}'}
+${font Inconsolata:bold:size=10}NV  Clock:  ${alignr}${font}${execi 4 nvidia-settings -q GPUCurrentClockFreqs -t | awk -F"," '{print $1}'} /  705 MHz
+${font Inconsolata:bold:size=10}MEM Clock:  ${alignr}${font}${execi 4 nvidia-settings -q GPUCurrentClockFreqs -t | awk -F"," '{print $2}'} / 3004 MHz
+${font Inconsolata:bold:size=10}Ram:    ${alignr}${font}${execi 4 nvidia-smi -q -d memory | grep Used | awk -F":" '{print $2}' | awk -F" " '{print ($1 / 2047) * 100.0f}'}%
+
+${font Inconsolata:bold:size=11}NET ${font}${hr}
+${font Inconsolata:bold:size=10}IP address: $font$alignr ${addr wlan0}
+${font Inconsolata:bold:size=10}ESSID: $font$alignr ${wireless_essid wlan0}
+${font Inconsolata:bold:size=10}Connection Quality: $font$alignr ${wireless_link_qual_perc wlan0}%
+
+${font Inconsolata:bold:size=10}Download ${font}
+
+
+${downspeedf wlan0}/s $alignr ${totaldown wlan0}
+
+${font Inconsolata:bold:size=10}Upload ${font}
+
+
+${upspeed wlan0}/s $alignr ${totalup wlan0}
+
+${font Inconsolata:bold:size=11}DISKS ${font}${hr}
+/ $alignc ${fs_used /} / ${fs_size /} $alignr${fs_used_perc /}%
+${fs_bar /}
+/home $alignc ${fs_used /home} / ${fs_size /home} $alignr${fs_used_perc /home}%
+${fs_bar /home}
+/share $alignc ${fs_used /share} / ${fs_size /share} $alignr${fs_used_perc /share}%
+${fs_bar /share}
+
+${if_mpd_playing}${font Inconsolata:bold:size=11}MPD ${font}${hr}
+${font Inconsolata:bold:size=10}State: ${font}${alignr}${mpd_status}
+${font Inconsolata:bold:size=10}Artist: ${font}${alignr}${mpd_artist}
+${font Inconsolata:bold:size=10}Album: ${font}${alignr}${mpd_album}
+${font Inconsolata:bold:size=10}Title: ${font}${alignr}${mpd_title}
+${mpd_bar}
+${lua conky_find_art}
+${image /home/daryl/.config/.album_art -p 0,825 -s 200x200}
+
+${endif}
